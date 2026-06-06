@@ -52,13 +52,16 @@ class AbilityBridge extends StatelessWidget {
 
         // 🚀 UPDATED: Changed from '/seeker-home' to '/seeker'
         '/seeker': (context) => const SeekerDashboard(),
+        '/employer': (context) => const EmployerDashboard(),
         '/job-detail': (context) => const JobDetailScreen(),
+        '/post-job': (context) => const PostJobScreen(),
         '/profile': (context) => const ProfileSettingsScreen(),
         '/report': (context) => const ReportScreen(),
         '/messages': (context) => const MessagesScreen(),
         '/applicants': (context) => const ApplicantReviewScreen(),
         '/apply-job': (context) => const ApplyJobScreen(),
         '/chat': (context) => const ChatScreen(),
+        '/applicant-review': (context) => const ApplicantReviewScreen(),
 
         // Community & Personal Growth
         '/mentors': (context) => const MentorshipScreen(),

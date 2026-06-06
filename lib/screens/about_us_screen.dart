@@ -3,48 +3,45 @@ import 'package:flutter/material.dart';
 class AboutUsScreen extends StatelessWidget {
   const AboutUsScreen({super.key});
 
-  // This is the data for your 5 developers. 
-  // Just update the text and image paths here!
+  // This is the data for your 5 developers.
   final List<Map<String, String>> teamMembers = const [
     {
-      "name": "Developer One",
-      "role": "Project Manager & Backend",
-      "image": "assets/dev1.jpg",
-      "bio": "Passionate about building inclusive technology and connecting people."
+      "name": "YOUNGA TCHAPPI DYLANE",
+      "role": "Project Manager & Backend Developer ",
+      "image": "assets/dylane.jpg",
+      "bio":
+          "Passionate about building inclusive technology and connecting people.",
     },
     {
-      "name": "Developer Two",
-      "role": "Lead UI/UX Designer",
-      "image": "assets/dev2.jpg",
-      "bio": "Designs beautiful, accessible, and user-friendly interfaces."
+      "name": "TCHIGUI MAKOUFEU SHELA",
+      "role": "Leader backend developer",
+      "image": "assets/soft.jpg",
+      "bio": "Designs beautiful, accessible, and user-friendly interfaces.",
     },
     {
-      "name": "Developer Three",
+      "name": "MBANGUE TSHUNGBOVE MARIE",
       "role": "Frontend Flutter Engineer",
-      "image": "assets/dev3.jpg",
-      "bio": "Turns designs into smooth, functional mobile applications."
+      "image": "assets/marie.jpg",
+      "bio": "Turns designs into smooth, functional mobile applications.",
     },
     {
-      "name": "Developer Four",
+      "name": "BIHINA DIBANJO TONY",
       "role": "Database Administrator",
-      "image": "assets/dev4.jpg",
-      "bio": "Ensures all user data is secure, fast, and reliable."
+      "image": "assets/tony.jpg",
+      "bio": "Ensures all user data is secure, fast, and reliable.",
     },
     {
-      "name": "Developer Five",
+      "name": "NIMBA CARREL",
       "role": "Quality Assurance & Testing",
-      "image": "assets/dev5.jpg",
-      "bio": "Squashes bugs and ensures the app runs perfectly on all devices."
+      "image": "assets/carel.jpg",
+      "bio": "Squashes bugs and ensures the app runs perfectly on all devices.",
     },
   ];
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text("About the Team"),
-        centerTitle: true,
-      ),
+      appBar: AppBar(title: const Text("About the Team"), centerTitle: true),
       body: ListView.builder(
         padding: const EdgeInsets.all(16.0),
         itemCount: teamMembers.length,
@@ -61,18 +58,35 @@ class AboutUsScreen extends StatelessWidget {
               child: Row(
                 children: [
                   // Developer Picture
-                  CircleAvatar(
-                    radius: 40,
-                    backgroundColor: Colors.blueAccent.withOpacity(0.2),
-                    backgroundImage: AssetImage(member['image']!),
-                    // If the image is missing, it shows a default person icon
-                    onBackgroundImageError: (exception, stackTrace) {},
-                    child: member['image']!.isEmpty 
-                        ? const Icon(Icons.person, size: 40, color: Colors.blueAccent) 
-                        : null,
+                  // 🛠️ FIXED: Replaced standard CircleAvatar with a clean, explicit image loader container
+                  Container(
+                    width: 80,
+                    height: 80,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors
+                          .grey[200], // Smooth placeholder background tint
+                    ),
+                    child: ClipOval(
+                      child: Image.asset(
+                        member['image']!,
+                        fit: BoxFit.cover,
+                        // 🚀 If the system can't resolve the file path, this handles the fallback gracefully
+                        errorBuilder: (context, error, stackTrace) {
+                          print(
+                            "⚠️ Unable to load asset path: ${member['image']}. Error: $error",
+                          );
+                          return const Icon(
+                            Icons.person,
+                            size: 40,
+                            color: Colors.grey,
+                          );
+                        },
+                      ),
+                    ),
                   ),
                   const SizedBox(width: 16),
-                  
+
                   // Developer Details
                   Expanded(
                     child: Column(
@@ -81,7 +95,7 @@ class AboutUsScreen extends StatelessWidget {
                         Text(
                           member['name']!,
                           style: const TextStyle(
-                            fontSize: 18, 
+                            fontSize: 16,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
@@ -89,7 +103,7 @@ class AboutUsScreen extends StatelessWidget {
                         Text(
                           member['role']!,
                           style: const TextStyle(
-                            color: Colors.blueAccent, 
+                            color: Colors.blueAccent,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
@@ -97,7 +111,7 @@ class AboutUsScreen extends StatelessWidget {
                         Text(
                           member['bio']!,
                           style: TextStyle(
-                            fontSize: 14, 
+                            fontSize: 14,
                             color: Colors.grey[700],
                           ),
                         ),

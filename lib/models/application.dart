@@ -30,7 +30,7 @@ class Application {
     return Application(
       applicationId: json['application_id'],
       jobId: json['job_id'],
-      seekerId: json['seeker_id'],
+      seekerId: json['seeker_id'] ?? json['seeker_user_id'],
       seekerName: json['seeker_name'] ?? 'Anonymous Candidate',
       jobTitle: json['job_title'],
       companyName: json['company_name'] ?? 'Unknown Company',

@@ -1,16 +1,28 @@
+// controllers/authController.js
 const pool = require('../config/db');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 
 // --- REGISTER A NEW USER ---
 exports.register = async(req, res) => {
-    // 🚀 Added companyName to the incoming request body
+    // Grab registration properties from the Flutter request payload
     const { email, password, role, companyName } = req.body;
 
+    if (!email || !password || !role) {
+        return res.status(400).json({ message: 'Missing required registration parameters.' });
+    }
+
+    // Acquire a singular isolated database connection to perform a secure atomic transaction
+    const connection = await pool.getConnection();
+
     try {
+        // Start database transaction pipeline
+        await connection.beginTransaction();
+
         // 1. Check if user already exists
-        const [existingUsers] = await pool.query('SELECT * FROM users WHERE email = ?', [email]);
+        const [existingUsers] = await connection.query('SELECT * FROM users WHERE email = ?', [email]);
         if (existingUsers.length > 0) {
+            await connection.rollback(); // Cancel transaction
             return res.status(400).json({ message: 'User already exists with this email.' });
         }
 
@@ -19,38 +31,46 @@ exports.register = async(req, res) => {
         const passwordHash = await bcrypt.hash(password, salt);
 
         // 3. Insert the new user into the database
-        const [result] = await pool.query(
+        const [result] = await connection.query(
             'INSERT INTO users (email, password_hash, role) VALUES (?, ?, ?)', [email, passwordHash, role]
         );
 
         const newUserId = result.insertId;
 
-        // 4. 🚀 OOP Logic: Automatically create the company if the user is an employer
-        if (role === 'employer' && companyName) {
-            // We insert the new user's ID, the company name, and some default values for the required columns
-            await pool.query(
-                'INSERT INTO companies (admin_user_id, company_name, reality_score, inclusivity_tier) VALUES (?, ?, ?, ?)', [newUserId, companyName, 1.00, 'None']
+        // 4. 🚀 LIFECYCLE LINK: Automatically provision a company container if the registrant is an employer
+        if (role === 'employer') {
+            // If Flutter didn't supply a companyName text field, generate a clean placeholder string
+            const finalCompanyName = companyName || `Company ${newUserId}`;
+
+            // Insert matching company metadata row linked back to our new user_id column
+            await connection.query(
+                `INSERT INTO companies (admin_user_id, company_name, reality_score, inclusivity_tier) 
+                 VALUES (?, ?, 1.00, 'None')`, [newUserId, finalCompanyName]
             );
 
-            return res.status(201).json({
-                message: 'Employer and Company registered successfully!',
-                userId: newUserId
-            });
+            console.log(`🏢 [REGISTRATION LOG] Created corporate entity profile row for User ID: ${newUserId}`);
         }
 
-        // If it is a seeker, just return the standard success message
+        // Commit both inserts into your MySQL system permanently together
+        await connection.commit();
+        console.log(`👤 [REGISTRATION SUCCESS] Secure account built for profile entity ID: ${newUserId}`);
+
         res.status(201).json({
-            message: 'User registered successfully!',
+            message: role === 'employer' ? 'Employer and Company registered successfully!' : 'User registered successfully!',
             userId: newUserId
         });
 
     } catch (error) {
+        // Cancel everything if any internal database sequence fails
+        await connection.rollback();
         console.error('Registration Error:', error);
         res.status(500).json({ message: 'Server error during registration.' });
+    } finally {
+        // Always release the connection handle back to pool management
+        connection.release();
     }
 };
 
-// --- LOGIN AN EXISTING USER ---
 // --- LOGIN AN EXISTING USER ---
 exports.login = async(req, res) => {
     const { email, password } = req.body;
@@ -70,7 +90,7 @@ exports.login = async(req, res) => {
             return res.status(401).json({ message: 'Invalid credentials.' });
         }
 
-        // 3. 🚀 NEW: If they are an employer, find their company_id!
+        // 3. 🚀 Find their company_id if they are an employer
         let companyId = null;
         if (user.role === 'employer') {
             const [companies] = await pool.query('SELECT company_id FROM companies WHERE admin_user_id = ?', [user.user_id]);
@@ -84,14 +104,14 @@ exports.login = async(req, res) => {
             process.env.JWT_SECRET, { expiresIn: '7d' }
         );
 
-        res.status(200).json({
+res.status(200).json({
             message: 'Login successful!',
             token: token,
             user: {
                 id: user.user_id,
+                name: user.email.split('@')[0], // Use email prefix as name
                 email: user.email,
-                role: user.role,
-                companyId: companyId // 🚀 SEND THIS BACK TO FLUTTER!
+                role: user.role
             }
         });
 

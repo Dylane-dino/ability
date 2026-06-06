@@ -1,9 +1,7 @@
 // lib/screens/applicant_review_screen.dart
 import 'package:flutter/material.dart';
-import '../app_components.dart';
 import '../services/application_service.dart';
 import '../models/application.dart';
-import 'chat_screen.dart';
 
 class ApplicantReviewScreen extends StatefulWidget {
   const ApplicantReviewScreen({super.key});
@@ -21,14 +19,13 @@ class _ApplicantReviewScreenState extends State<ApplicantReviewScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Get jobId passed from employer dashboard or job routes
-    final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>?;
+    final args =
+        ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>?;
     if (args != null && args['jobId'] != null) {
       _jobId = args['jobId'] as int;
       _jobTitle = args['jobTitle'] as String?;
       _fetchApplications();
     } else {
-      // No jobId provided, show error
       setState(() {
         _applications = [];
         _isLoading = false;
@@ -39,11 +36,21 @@ class _ApplicantReviewScreenState extends State<ApplicantReviewScreen> {
 
   Future<void> _fetchApplications() async {
     setState(() => _isLoading = true);
-    final apps = await ApplicationService().getJobApplications(_jobId);
-    setState(() {
-      _applications = apps;
-      _isLoading = false;
-    });
+    try {
+      final apps = await ApplicationService().getJobApplications(_jobId);
+      setState(() {
+        _applications = apps;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Error fetching applications: $e"),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   Future<void> _updateStatus(int applicationId, String status) async {
@@ -53,23 +60,33 @@ class _ApplicantReviewScreenState extends State<ApplicantReviewScreen> {
     );
     if (success) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Status updated to $status")),
+        SnackBar(
+          content: Text("Status successfully updated to: $status"),
+          backgroundColor: Colors.green,
+        ),
       );
-      _fetchApplications();
+      _fetchApplications(); // Reloads list from Node backend instantly
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text("${_jobTitle ?? 'Applicants'} • ${_applications.length} Total")),
+      appBar: AppBar(
+        title: Text(
+          "${_jobTitle ?? 'Applicants'} • ${_applications.length} Total",
+        ),
+      ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _applications.isEmpty
-              ? const Center(child: Text("No applications yet for this job."))
-              : ListView(
-                  children: _applications.map((app) => _applicantTile(app)).toList(),
-                ),
+          ? const Center(child: Text("No applications yet for this job."))
+          : ListView(
+              padding: const EdgeInsets.all(12),
+              children: _applications
+                  .map((app) => _applicantTile(app))
+                  .toList(),
+            ),
     );
   }
 
@@ -77,7 +94,10 @@ class _ApplicantReviewScreenState extends State<ApplicantReviewScreen> {
     Color matchColor;
     String matchLabel;
 
-    switch (app.status) {
+    // 🛠️ FIXED: Convert to lowercase to prevent database casing mismatches from breaking UI labels
+    final normalizedStatus = app.status.toLowerCase().trim();
+
+    switch (normalizedStatus) {
       case 'accepted':
         matchColor = Colors.green;
         matchLabel = "Accepted";
@@ -87,6 +107,7 @@ class _ApplicantReviewScreenState extends State<ApplicantReviewScreen> {
         matchLabel = "Rejected";
         break;
       case 'interview_offered':
+      case 'interview offered':
         matchColor = Colors.blue;
         matchLabel = "Interview Offered";
         break;
@@ -121,13 +142,19 @@ class _ApplicantReviewScreenState extends State<ApplicantReviewScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 if (app.seekerBio != null) ...[
-                  const Text("About", style: TextStyle(fontWeight: FontWeight.bold)),
+                  const Text(
+                    "About Seeker",
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
                   const SizedBox(height: 4),
                   Text(app.seekerBio!),
                   const SizedBox(height: 12),
                 ],
                 if (app.coverLetter != null) ...[
-                  const Text("Cover Letter", style: TextStyle(fontWeight: FontWeight.bold)),
+                  const Text(
+                    "Cover Letter Note",
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
                   const SizedBox(height: 4),
                   Text(app.coverLetter!),
                   const SizedBox(height: 12),
@@ -137,55 +164,84 @@ class _ApplicantReviewScreenState extends State<ApplicantReviewScreen> {
                   style: const TextStyle(fontSize: 12, color: Colors.grey),
                 ),
                 const SizedBox(height: 15),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    ElevatedButton.icon(
-                      onPressed: () => Navigator.pushNamed(
-                        context,
-                        '/chat',
-                        arguments: {
-                          'otherUserId': app.seekerId,
-                          'otherUserName': app.seekerName,
-                          'jobId': app.jobId,
-                        },
-                      ),
-                      icon: const Icon(Icons.chat),
-                      label: const Text("Message"),
-                    ),
-                    if (app.status == 'pending') ...[
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
                       ElevatedButton.icon(
-                        onPressed: () => _updateStatus(app.applicationId, 'viewed'),
-                        icon: const Icon(Icons.visibility),
-                        label: const Text("Mark Viewed"),
-                        style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
+                        onPressed: () => Navigator.pushNamed(
+                          context,
+                          '/chat',
+                          arguments: {
+                            'otherUserId': app.seekerId,
+                            'otherUserName': app.seekerName,
+                            'jobId': app.jobId,
+                          },
+                        ),
+                        icon: const Icon(Icons.chat),
+                        label: const Text("Message"),
                       ),
-                      ElevatedButton.icon(
-                        onPressed: () => _updateStatus(app.applicationId, 'interview_offered'),
-                        icon: const Icon(Icons.calendar_today),
-                        label: const Text("Offer Interview"),
-                        style: ElevatedButton.styleFrom(backgroundColor: Colors.blue),
-                      ),
-                      ElevatedButton.icon(
-                        onPressed: () => _updateStatus(app.applicationId, 'accepted'),
-                        icon: const Icon(Icons.check),
-                        label: const Text("Accept"),
-                        style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-                      ),
-                      ElevatedButton.icon(
-                        onPressed: () => _updateStatus(app.applicationId, 'rejected'),
-                        icon: const Icon(Icons.close),
-                        label: const Text("Reject"),
-                        style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                      ),
-                    ] else ...[
-                      TextButton.icon(
-                        onPressed: () => _updateStatus(app.applicationId, 'pending'),
-                        icon: const Icon(Icons.undo),
-                        label: const Text("Reset Status"),
-                      ),
+                      const SizedBox(width: 8),
+                      // 🛠️ FIXED: Check against normalized string to make sure status management shows consistently
+                      if (normalizedStatus == 'pending' ||
+                          normalizedStatus == 'viewed') ...[
+                        if (normalizedStatus == 'pending') ...[
+                          ElevatedButton.icon(
+                            onPressed: () =>
+                                _updateStatus(app.applicationId, 'viewed'),
+                            icon: const Icon(Icons.visibility),
+                            label: const Text("Mark Viewed"),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.orange,
+                              foregroundColor: Colors.white,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                        ],
+                        ElevatedButton.icon(
+                          onPressed: () => _updateStatus(
+                            app.applicationId,
+                            'interview_offered',
+                          ),
+                          icon: const Icon(Icons.calendar_today),
+                          label: const Text("Offer Interview"),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.blue,
+                            foregroundColor: Colors.white,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        ElevatedButton.icon(
+                          onPressed: () =>
+                              _updateStatus(app.applicationId, 'accepted'),
+                          icon: const Icon(Icons.check),
+                          label: const Text("Accept"),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.green,
+                            foregroundColor: Colors.white,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        ElevatedButton.icon(
+                          onPressed: () =>
+                              _updateStatus(app.applicationId, 'rejected'),
+                          icon: const Icon(Icons.close),
+                          label: const Text("Reject"),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.red,
+                            foregroundColor: Colors.white,
+                          ),
+                        ),
+                      ] else ...[
+                        TextButton.icon(
+                          onPressed: () =>
+                              _updateStatus(app.applicationId, 'pending'),
+                          icon: const Icon(Icons.undo),
+                          label: const Text("Reset Status"),
+                        ),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
               ],
             ),

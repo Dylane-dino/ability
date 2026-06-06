@@ -1,6 +1,5 @@
 // lib/screens/post_job_screen.dart
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../models/job_listing.dart';
 import '../services/job_services.dart';
 
@@ -14,42 +13,36 @@ class PostJobScreen extends StatefulWidget {
 class _PostJobScreenState extends State<PostJobScreen> {
   final _formKey = GlobalKey<FormState>();
   final TextEditingController _titleController = TextEditingController();
-   final TextEditingController _descController = TextEditingController();
+  final TextEditingController _descController = TextEditingController();
 
-   String _jobType = 'full-time';
-   bool _isRemote = false;
+  String _jobType = 'full-time';
+  bool _isRemote = false;
   bool _isLoading = false;
 
   Future<void> _submitJob() async {
     if (_formKey.currentState!.validate()) {
       setState(() => _isLoading = true);
 
-      // 1. Get the dynamic company ID from SharedPreferences
-      SharedPreferences prefs = await SharedPreferences.getInstance();
-      int currentCompanyId =
-          prefs.getInt('companyId') ??
-          1; // Fallback to 1 if something goes wrong
-
-      // 2. Build the job object
-      JobListing newJob = JobListing(
-        companyId: currentCompanyId, // 🚀 DYNAMIC!
+      // 🚀 FIX: Removed the SharedPreferences query for 'employerId' 
+      // The backend handles user verification directly via the JWT header token.
+      final JobListing newJob = JobListing(
         title: _titleController.text,
         description: _descController.text,
         jobType: _jobType,
         isRemote: _isRemote,
-        accommodations: {"wheelchair": true}, // Example accessibility feature
+        accommodations: const {"wheelchair": true},
       );
 
-      // 3. Send to Node.js Backend via OOP Service
       bool success = await JobService().postJob(newJob);
 
+      if (!mounted) return;
       setState(() => _isLoading = false);
 
       if (success) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Job posted successfully!")),
+          const SnackBar(content: Text("Job posted successfully! 🎉")),
         );
-        Navigator.pop(context); // Send them back to their Employer Dashboard
+        Navigator.pop(context);
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -58,6 +51,13 @@ class _PostJobScreenState extends State<PostJobScreen> {
         );
       }
     }
+  }
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _descController.dispose();
+    super.dispose();
   }
 
   @override
@@ -93,28 +93,28 @@ class _PostJobScreenState extends State<PostJobScreen> {
               ),
               const SizedBox(height: 16),
 
-               DropdownButtonFormField<String>(
-                 value: _jobType,
-                 decoration: const InputDecoration(
-                   labelText: "Job Type",
-                   border: OutlineInputBorder(),
-                 ),
-                 items: const [
-                   DropdownMenuItem(
-                     value: 'full-time',
-                     child: Text("Full-Time"),
-                   ),
-                   DropdownMenuItem(
-                     value: 'part-time',
-                     child: Text("Part-Time"),
-                   ),
-                   DropdownMenuItem(
-                     value: 'micro-task',
-                     child: Text("Micro-Task"),
-                   ),
-                 ],
-                 onChanged: (val) => setState(() => _jobType = val!),
-               ),
+              DropdownButtonFormField<String>(
+                value: _jobType,
+                decoration: const InputDecoration(
+                  labelText: "Job Type",
+                  border: OutlineInputBorder(),
+                ),
+                items: const [
+                  DropdownMenuItem(
+                    value: 'full-time',
+                    child: Text("Full-Time"),
+                  ),
+                  DropdownMenuItem(
+                    value: 'part-time',
+                    child: Text("Part-Time"),
+                  ),
+                  DropdownMenuItem(
+                    value: 'micro-task',
+                    child: Text("Micro-Task"),
+                  ),
+                ],
+                onChanged: (val) => setState(() => _jobType = val!),
+              ),
               const SizedBox(height: 16),
 
               SwitchListTile(
@@ -133,7 +133,14 @@ class _PostJobScreenState extends State<PostJobScreen> {
                   foregroundColor: Colors.white,
                 ),
                 child: _isLoading
-                    ? const CircularProgressIndicator(color: Colors.white)
+                    ? const SizedBox(
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 2,
+                        ),
+                      )
                     : const Text(
                         "Post Job",
                         style: TextStyle(

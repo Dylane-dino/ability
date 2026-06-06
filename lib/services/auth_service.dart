@@ -3,6 +3,17 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'api_service.dart';
 
 class AuthService {
+  // 1. Create a private constructor to prevent external classes from using 'new AuthService()'
+  AuthService._internal();
+
+  // 2. Create the single, private static instance of the class
+  static final AuthService _instance = AuthService._internal();
+
+  // 3. Create a factory constructor that always returns the exact same internal instance
+  factory AuthService() {
+    return _instance;
+  }
+
   // --- REGISTER ---
   Future<bool> register(
     String email,

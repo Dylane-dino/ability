@@ -4,7 +4,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 class CompanyService {
-  static const String _baseUrl = 'http://192.168.88.176:3000/api/companies';
+  static const String _baseUrl = 'http://10.244.16.141:3000/api/companies';
 
   // Fetch admin user ID for a company
   Future<Map<String, dynamic>?> getCompanyAdmin(int companyId) async {

@@ -1,7 +1,5 @@
-// lib/screens/employer_dashboard.dart
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../app_components.dart';
 import '../services/job_services.dart';
 import '../models/job_listing.dart';
 
@@ -16,32 +14,50 @@ class _EmployerDashboardState extends State<EmployerDashboard> {
   List<JobListing> _myJobs = [];
   bool _isLoading = true;
 
+  // Live dynamic counter stats mapped directly from your database
+  int _totalPosts = 0;
+  int _totalApps = 0;
+  int _interviews = 0;
+
   @override
   void initState() {
     super.initState();
-    _fetchMyJobs();
+    _fetchDashboardPayload();
   }
 
-  Future<void> _fetchMyJobs() async {
-    final prefs = await SharedPreferences.getInstance();
-    final companyId = prefs.getInt('companyId');
-    if (companyId == null) {
+  // 🚀 FETCH LIVE METRICS AND LISTINGS FROM BACKEND FILTERED BY EMPLOYER ID
+  Future<void> _fetchDashboardPayload() async {
+    setState(() => _isLoading = true);
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+
+      // 🛠️ Read saved identifier from login screen (Fall back to ID 1 for testing purposes)
+      final employerId = prefs.getInt('employerId') ?? 1;
+
+      // Pulls clean telemetry data mapping from your updated JobService stream, passing the employerId
+      final Map<String, dynamic> dashboardData = await JobService()
+          .fetchEmployerDashboardData(employerId);
+
+      setState(() {
+        _myJobs = dashboardData['jobs'] as List<JobListing>;
+
+        // Extract live summary totals sent down by Node.js express routers
+        final Map<String, dynamic> stats = dashboardData['stats'] ?? {};
+        _totalPosts = stats['totalPosts'] ?? 0;
+        _totalApps = stats['totalApps'] ?? 0;
+        _interviews = stats['interviews'] ?? 0;
+
+        _isLoading = false;
+      });
+    } catch (e) {
+      print("💥 Error loading employer dashboard UI elements: $e");
       setState(() => _isLoading = false);
-      return;
     }
-
-    // Fetch all jobs and filter by companyId
-    final allJobs = await JobService().fetchJobs();
-    final myJobs = allJobs.where((j) => j.companyId == companyId).toList();
-
-    setState(() {
-      _myJobs = myJobs;
-      _isLoading = false;
-    });
   }
 
   Future<void> _onRefresh() async {
-    await _fetchMyJobs();
+    await _fetchDashboardPayload();
   }
 
   @override
@@ -50,7 +66,11 @@ class _EmployerDashboardState extends State<EmployerDashboard> {
       appBar: AppBar(
         title: const Text("Employer Portal"),
         actions: [
-          IconButton(onPressed: _onRefresh, icon: const Icon(Icons.refresh)),
+          IconButton(
+            onPressed: _onRefresh,
+            icon: const Icon(Icons.refresh),
+            tooltip: "Refresh dashboard metrics",
+          ),
         ],
       ),
       body: _isLoading
@@ -58,15 +78,15 @@ class _EmployerDashboardState extends State<EmployerDashboard> {
           : Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Stats
+                // 📊 LIVE STATS COUNTER BAR
                 Padding(
                   padding: const EdgeInsets.all(16.0),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      _topStat("Total Posts", _myJobs.length.toString()),
-                      _topStat("Total Apps", "12"),
-                      _topStat("Interviews", "3"),
+                      _topStat("Total Posts", _totalPosts.toString()),
+                      _topStat("Total Apps", _totalApps.toString()),
+                      _topStat("Interviews", _interviews.toString()),
                     ],
                   ),
                 ),
@@ -79,27 +99,50 @@ class _EmployerDashboardState extends State<EmployerDashboard> {
                   ),
                 ),
                 const SizedBox(height: 10),
-                // Job List
+
+                // 📝 JOB ACTIVE LISTING DYNAMIC BUILDER
                 Expanded(
                   child: _myJobs.isEmpty
-                      ? const Center(child: Text("No jobs posted yet. Tap 'Post New Job' to get started."))
-                      : ListView.builder(
-                          itemCount: _myJobs.length,
-                          itemBuilder: (context, index) {
-                            final job = _myJobs[index];
-                            return _jobStatCard(job);
-                          },
+                      ? const Center(
+                          child: Padding(
+                            padding: EdgeInsets.all(24.0),
+                            child: Text(
+                              "No jobs posted yet. Tap 'Post New Job' to get started.",
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: Colors.grey,
+                                fontSize: 16,
+                              ),
+                            ),
+                          ),
+                        )
+                      : RefreshIndicator(
+                          onRefresh: _onRefresh,
+                          child: ListView.builder(
+                            itemCount: _myJobs.length,
+                            itemBuilder: (context, index) {
+                              final job = _myJobs[index];
+                              return _jobStatCard(job);
+                            },
+                          ),
                         ),
                 ),
-                // Post Job Button
+
+                // ➕ POST JOB NAVIGATION BUTTON ACTION CONTAINER
                 Padding(
                   padding: const EdgeInsets.all(16.0),
                   child: SizedBox(
                     width: double.infinity,
                     child: ElevatedButton.icon(
-                      onPressed: () => Navigator.pushNamed(context, '/post-job'),
+                      onPressed: () async {
+                        await Navigator.pushNamed(context, '/post-job');
+                        _fetchDashboardPayload(); // Refresh automatically upon returning
+                      },
                       icon: const Icon(Icons.add),
-                      label: const Text("Post New Job", style: TextStyle(fontSize: 16)),
+                      label: const Text(
+                        "Post New Job",
+                        style: TextStyle(fontSize: 16),
+                      ),
                       style: ElevatedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 14),
                         backgroundColor: Colors.blueAccent,
@@ -124,6 +167,7 @@ class _EmployerDashboardState extends State<EmployerDashboard> {
             color: Colors.blueAccent,
           ),
         ),
+        const SizedBox(height: 4),
         Text(label, style: const TextStyle(fontSize: 12, color: Colors.grey)),
       ],
     );
@@ -139,25 +183,39 @@ class _EmployerDashboardState extends State<EmployerDashboard> {
       ),
       child: ListTile(
         contentPadding: const EdgeInsets.all(12),
-        title: Text(job.title, style: const TextStyle(fontWeight: FontWeight.bold)),
-        subtitle: Text("${job.jobType} • ${job.isRemote ? 'Remote' : 'On-Site'}"),
+        title: Text(
+          job.title,
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
+        subtitle: Padding(
+          padding: const EdgeInsets.only(top: 4.0),
+          child: Text(
+            "${job.jobType.toUpperCase()} • ${job.isRemote ? 'Remote' : 'On-Site'}",
+          ),
+        ),
         trailing: Column(
           mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             Text(
-              "12 Applicants",
+              // 🛠️ FIXED: Pulling live individual counts dynamically per card listing if your model exposes it
+              "${job.applicantCount ?? 0} Applicants",
               style: TextStyle(
-                fontSize: 16,
+                fontSize: 14,
                 fontWeight: FontWeight.w600,
-                color: Colors.green.shade700,
+                color: Colors.blueAccent.shade700,
               ),
             ),
-            const Text("total", style: TextStyle(fontSize: 10, color: Colors.grey)),
+            const Text(
+              "active listing",
+              style: TextStyle(fontSize: 10, color: Colors.grey),
+            ),
           ],
         ),
+        // 🛠️ ROUTE ALIGNMENT: Points to your review screen route name ('/applicant-review')
         onTap: () => Navigator.pushNamed(
           context,
-          '/applicants',
+          '/applicant-review',
           arguments: {'jobId': job.jobId, 'jobTitle': job.title},
         ),
       ),

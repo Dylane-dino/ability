@@ -6,22 +6,19 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/application.dart';
 
 class ApplicationService {
-  static const String _baseUrl = 'http://192.168.88.176:3000/api/applications';
+  static const String _baseUrl = 'http://10.244.16.141:3000/api/applications';
 
   // --- SUBMIT JOB APPLICATION ---
-  Future<bool> submitApplication({
-    required int jobId,
-    required int seekerId,
-    String? coverLetter,
-  }) async {
+  // 🚀 Renamed to applyToJob to match exactly what your JobDetailScreen calls!
+  Future<bool> applyToJob(int jobId, int seekerId) async {
     try {
       final response = await http.post(
         Uri.parse(_baseUrl),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'job_id': jobId,
-          'seeker_id': seekerId,
-          'cover_letter': coverLetter,
+          'seeker_id':
+              seekerId, // Maps to seeker_user_id cleanly on Node backend
         }),
       );
 

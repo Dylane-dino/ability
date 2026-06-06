@@ -8,5 +8,7 @@ router.post('/', jobController.createJob);
 
 // GET /api/jobs -> Trigger the getJobs function
 router.get('/', jobController.getJobs);
+// Add this alongside your other job router mappings
+router.get('/employer-dashboard', jobController.getEmployerDashboard);
 
 module.exports = router;

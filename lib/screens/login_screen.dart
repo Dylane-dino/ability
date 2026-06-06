@@ -1,3 +1,4 @@
+import 'dart:convert'; // Added to ensure json encoding/decoding works if needed
 import 'package:flutter/material.dart';
 import '../app_components.dart';
 import '../services/api_service.dart';
@@ -16,6 +17,7 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _isLoading = false;
 
   void _handleLogin() async {
+    // 1. Validation Check
     if (_emailController.text.isEmpty || _passwordController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -28,7 +30,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
     setState(() => _isLoading = true);
 
-    // Call our Node.js Backend
+    // 2. Network API Query to your Node.js server
     final responseData = await ApiService.loginUser(
       _emailController.text.trim(),
       _passwordController.text.trim(),
@@ -36,40 +38,40 @@ class _LoginScreenState extends State<LoginScreen> {
 
     setState(() => _isLoading = false);
 
+    // 3. Process the server response
     if (responseData != null && responseData['user'] != null) {
-      // 🚀 SUCCESS! Now we check the role to decide where to go
-      String role = responseData['user']['role'];
-
-      if (role == 'employer') {
-        Navigator.pushReplacementNamed(context, '/employer');
-      } else {
-        Navigator.pushReplacementNamed(context, '/seeker');
-      }
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Invalid email or password."),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
-
-    if (responseData != null && responseData['user'] != null) {
-      // 🚀 SUCCESS! Save user data locally
+      // SUCCESS! Fetch user meta-data
       final prefs = await SharedPreferences.getInstance();
+      final userMap = responseData['user'];
 
-      // Save the name and email from the database (Fallback to 'User' if null)
-      await prefs.setString('userName', responseData['user']['name'] ?? 'User');
-      await prefs.setString('userEmail', responseData['user']['email'] ?? '');
+      // Save general credentials locally for active session tracking
+      await prefs.setString('userName', userMap['name'] ?? 'User');
+      await prefs.setString('userEmail', userMap['email'] ?? '');
 
-      String role = responseData['user']['role'];
+      String role = userMap['role'] ?? 'seeker';
+      await prefs.setString('role', role);
 
+      // 🛠️ CRITICAL ADDITION: Save user IDs to handle localized dashboard queries
+      if (userMap['id'] != null) {
+        await prefs.setInt('userId', userMap['id'] as int);
+      }
+
+      // If your backend nests employer profiles specifically or returns an explicit employerId:
+      if (userMap['employerId'] != null) {
+        await prefs.setInt('employerId', userMap['employerId'] as int);
+      } else if (role == 'employer' && userMap['id'] != null) {
+        // Fallback: Use user primary key if your table structures share a profile mapping identity
+        await prefs.setInt('employerId', userMap['id'] as int);
+      }
+
+      // Route to the corresponding dashboard registered in main.dart
       if (role == 'employer') {
         Navigator.pushReplacementNamed(context, '/employer');
       } else {
         Navigator.pushReplacementNamed(context, '/seeker');
       }
     } else {
+      // FAIL! Display a single error notification
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text("Invalid email or password."),
@@ -84,7 +86,6 @@ class _LoginScreenState extends State<LoginScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text("Login")),
       body: SafeArea(
-        // 🚀 FIX: SingleChildScrollView allows the screen to scroll when the keyboard pops up
         child: SingleChildScrollView(
           child: Padding(
             padding: const EdgeInsets.symmetric(
@@ -95,7 +96,7 @@ class _LoginScreenState extends State<LoginScreen> {
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const SizedBox(height: 20), // Spacing from top
+                const SizedBox(height: 20),
                 const Icon(
                   Icons.accessibility_new,
                   size: 80,
@@ -142,7 +143,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ),
                 ),
-                const SizedBox(height: 20), // Extra spacing at the bottom
+                const SizedBox(height: 20),
               ],
             ),
           ),
