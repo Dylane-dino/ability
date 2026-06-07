@@ -6,30 +6,30 @@ exports.createApplication = async(req, res) => {
     const { job_id, seeker_id } = req.body;
 
     try {
-        const [jobs] = await pool.query('SELECT * FROM job_listings WHERE job_id = ?', [job_id]);
+        const { rows: jobs } = await pool.query('SELECT * FROM job_listings WHERE job_id = $1', [job_id]);
         if (jobs.length === 0) {
             return res.status(404).json({ message: 'Job not found.' });
         }
 
-        const [seekers] = await pool.query('SELECT * FROM users WHERE user_id = ? AND role = ?', [seeker_id, 'seeker']);
+        const { rows: seekers } = await pool.query('SELECT * FROM users WHERE user_id = $1 AND role = $2', [seeker_id, 'seeker']);
         if (seekers.length === 0) {
             return res.status(404).json({ message: 'Seeker not found.' });
         }
 
-        const [existing] = await pool.query(
-            'SELECT * FROM applications WHERE job_id = ? AND seeker_id = ?', [job_id, seeker_id]
+        const { rows: existing } = await pool.query(
+            'SELECT * FROM applications WHERE job_id = $1 AND seeker_id = $2', [job_id, seeker_id]
         );
         if (existing.length > 0) {
             return res.status(400).json({ message: 'Already applied to this job.' });
         }
 
-        const [result] = await pool.query(
-            'INSERT INTO applications (job_id, seeker_id, status) VALUES (?, ?, ?)', [job_id, seeker_id, 'pending']
+        const { rows: insertedApplications } = await pool.query(
+            'INSERT INTO applications (job_id, seeker_id, status) VALUES ($1, $2, $3) RETURNING application_id', [job_id, seeker_id, 'pending']
         );
 
         res.status(201).json({
             message: 'Application submitted successfully!',
-            applicationId: result.insertId,
+            applicationId: insertedApplications[0].application_id,
         });
     } catch (error) {
         console.error('Application Error:', error);
@@ -43,7 +43,7 @@ exports.getJobApplications = async(req, res) => {
 
     try {
         const query = `
-        SELECT 
+        SELECT
             a.application_id,
             a.job_id,
             a.seeker_id,
@@ -57,11 +57,11 @@ exports.getJobApplications = async(req, res) => {
         JOIN users u ON a.seeker_id = u.user_id
         JOIN job_listings j ON a.job_id = j.job_id
         JOIN companies c ON j.company_id = c.company_id
-        WHERE a.job_id = ?
+        WHERE a.job_id = $1
         ORDER BY a.applied_at DESC
     `;
 
-        const [rows] = await pool.query(query, [jobId]);
+        const { rows } = await pool.query(query, [jobId]);
         res.status(200).json(rows);
     } catch (error) {
         console.error('Error fetching job applications:', error);
@@ -75,7 +75,7 @@ exports.getSeekerApplications = async(req, res) => {
 
     try {
         const query = `
-        SELECT 
+        SELECT
             a.application_id,
             a.job_id,
             a.seeker_id,
@@ -90,11 +90,11 @@ exports.getSeekerApplications = async(req, res) => {
         FROM applications a
         JOIN job_listings j ON a.job_id = j.job_id
         JOIN companies c ON j.company_id = c.company_id
-        WHERE a.seeker_id = ?
+        WHERE a.seeker_id = $1
         ORDER BY a.applied_at DESC
     `;
 
-        const [rows] = await pool.query(query, [seekerId]);
+        const { rows } = await pool.query(query, [seekerId]);
         res.status(200).json(rows);
     } catch (error) {
         console.error('Error fetching seeker applications:', error);
@@ -113,11 +113,11 @@ exports.updateApplicationStatus = async(req, res) => {
     }
 
     try {
-        const [result] = await pool.query(
-            'UPDATE applications SET status = ? WHERE application_id = ?', [status, applicationId]
+        const result = await pool.query(
+            'UPDATE applications SET status = $1 WHERE application_id = $2', [status, applicationId]
         );
 
-        if (result.affectedRows === 0) {
+        if (result.rowCount === 0) {
             return res.status(404).json({ message: 'Application instance record not found.' });
         }
 

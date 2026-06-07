@@ -13,16 +13,16 @@ exports.register = async(req, res) => {
     }
 
     // Acquire a singular isolated database connection to perform a secure atomic transaction
-    const connection = await pool.getConnection();
+    const client = await pool.connect();
 
     try {
         // Start database transaction pipeline
-        await connection.beginTransaction();
+        await client.query('BEGIN');
 
         // 1. Check if user already exists
-        const [existingUsers] = await connection.query('SELECT * FROM users WHERE email = ?', [email]);
+        const { rows: existingUsers } = await client.query('SELECT * FROM users WHERE email = $1', [email]);
         if (existingUsers.length > 0) {
-            await connection.rollback(); // Cancel transaction
+            await client.query('ROLLBACK'); // Cancel transaction
             return res.status(400).json({ message: 'User already exists with this email.' });
         }
 
@@ -31,11 +31,11 @@ exports.register = async(req, res) => {
         const passwordHash = await bcrypt.hash(password, salt);
 
         // 3. Insert the new user into the database
-        const [result] = await connection.query(
-            'INSERT INTO users (email, password_hash, role) VALUES (?, ?, ?)', [email, passwordHash, role]
+        const { rows: insertedUsers } = await client.query(
+            'INSERT INTO users (email, password_hash, role) VALUES ($1, $2, $3) RETURNING user_id', [email, passwordHash, role]
         );
 
-        const newUserId = result.insertId;
+        const newUserId = insertedUsers[0].user_id;
 
         // 4. 🚀 LIFECYCLE LINK: Automatically provision a company container if the registrant is an employer
         if (role === 'employer') {
@@ -43,16 +43,16 @@ exports.register = async(req, res) => {
             const finalCompanyName = companyName || `Company ${newUserId}`;
 
             // Insert matching company metadata row linked back to our new user_id column
-            await connection.query(
-                `INSERT INTO companies (admin_user_id, company_name, reality_score, inclusivity_tier) 
-                 VALUES (?, ?, 1.00, 'None')`, [newUserId, finalCompanyName]
+            await client.query(
+                `INSERT INTO companies (admin_user_id, company_name, reality_score, inclusivity_tier)
+                 VALUES ($1, $2, 1.00, 'None')`, [newUserId, finalCompanyName]
             );
 
             console.log(`🏢 [REGISTRATION LOG] Created corporate entity profile row for User ID: ${newUserId}`);
         }
 
-        // Commit both inserts into your MySQL system permanently together
-        await connection.commit();
+        // Commit both inserts into your PostgreSQL system permanently together
+        await client.query('COMMIT');
         console.log(`👤 [REGISTRATION SUCCESS] Secure account built for profile entity ID: ${newUserId}`);
 
         res.status(201).json({
@@ -62,12 +62,12 @@ exports.register = async(req, res) => {
 
     } catch (error) {
         // Cancel everything if any internal database sequence fails
-        await connection.rollback();
+        await client.query('ROLLBACK');
         console.error('Registration Error:', error);
         res.status(500).json({ message: 'Server error during registration.' });
     } finally {
         // Always release the connection handle back to pool management
-        connection.release();
+        client.release();
     }
 };
 
@@ -77,7 +77,7 @@ exports.login = async(req, res) => {
 
     try {
         // 1. Find the user by email
-        const [users] = await pool.query('SELECT * FROM users WHERE email = ?', [email]);
+        const { rows: users } = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
         if (users.length === 0) {
             return res.status(404).json({ message: 'User not found.' });
         }
@@ -93,7 +93,7 @@ exports.login = async(req, res) => {
         // 3. 🚀 Find their company_id if they are an employer
         let companyId = null;
         if (user.role === 'employer') {
-            const [companies] = await pool.query('SELECT company_id FROM companies WHERE admin_user_id = ?', [user.user_id]);
+            const { rows: companies } = await pool.query('SELECT company_id FROM companies WHERE admin_user_id = $1', [user.user_id]);
             if (companies.length > 0) {
                 companyId = companies[0].company_id;
             }

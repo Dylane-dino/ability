@@ -5,7 +5,7 @@ exports.getEmployerDashboardStats = async(req, res) => {
 
     try {
         // Resolve the company_id for this employer (admin_user_id)
-        const [companyRows] = await pool.query('SELECT company_id FROM companies WHERE admin_user_id = ? LIMIT 1', [employerId]);
+        const { rows: companyRows } = await pool.query('SELECT company_id FROM companies WHERE admin_user_id = $1 LIMIT 1', [employerId]);
 
         if (companyRows.length === 0) {
             return res.status(200).json({
@@ -16,25 +16,25 @@ exports.getEmployerDashboardStats = async(req, res) => {
 
         const companyId = companyRows[0].company_id;
 
-        const [jobCountResult] = await pool.query(
-            'SELECT COUNT(*) as totalPosts FROM job_listings WHERE company_id = ?', [companyId]
+        const { rows: jobCountResult } = await pool.query(
+            'SELECT COUNT(*)::int as "totalPosts" FROM job_listings WHERE company_id = $1', [companyId]
         );
 
-        const [appCountResult] = await pool.query(`
-            SELECT COUNT(*) as totalApps
+        const { rows: appCountResult } = await pool.query(`
+            SELECT COUNT(*)::int as "totalApps"
             FROM applications a
             JOIN job_listings j ON a.job_id = j.job_id
-            WHERE j.company_id = ?
+            WHERE j.company_id = $1
         `, [companyId]);
 
-        const [interviewCountResult] = await pool.query(`
-            SELECT COUNT(*) as totalInterviews
+        const { rows: interviewCountResult } = await pool.query(`
+            SELECT COUNT(*)::int as "totalInterviews"
             FROM applications a
             JOIN job_listings j ON a.job_id = j.job_id
-            WHERE j.company_id = ? AND LOWER(a.status) IN ('interview_offered', 'interview offered')
+            WHERE j.company_id = $1 AND LOWER(a.status) IN ('interview_offered', 'interview offered')
         `, [companyId]);
 
-        const [jobs] = await pool.query(`
+        const { rows: jobs } = await pool.query(`
             SELECT
                 j.job_id,
                 j.company_id,
@@ -46,10 +46,10 @@ exports.getEmployerDashboardStats = async(req, res) => {
                 j.accommodation_offerings,
                 j.created_at,
                 c.company_name,
-                (SELECT COUNT(*) FROM applications WHERE job_id = j.job_id) as applicantCount
+                (SELECT COUNT(*)::int FROM applications WHERE job_id = j.job_id) as "applicantCount"
             FROM job_listings j
             JOIN companies c ON j.company_id = c.company_id
-            WHERE j.company_id = ?
+            WHERE j.company_id = $1
             ORDER BY j.created_at DESC
         `, [companyId]);
 
@@ -75,12 +75,12 @@ exports.getEmployerActiveJobs = async(req, res) => {
     const { employerId } = req.params;
     try {
         // Resolve company for this employer
-        const [companyRows] = await pool.query('SELECT company_id FROM companies WHERE admin_user_id = ? LIMIT 1', [employerId]);
+        const { rows: companyRows } = await pool.query('SELECT company_id FROM companies WHERE admin_user_id = $1 LIMIT 1', [employerId]);
         if (companyRows.length === 0) return res.status(200).json([]);
         const companyId = companyRows[0].company_id;
 
-        const [jobs] = await pool.query(
-            'SELECT * FROM job_listings WHERE company_id = ? ORDER BY created_at DESC', [companyId]
+        const { rows: jobs } = await pool.query(
+            'SELECT * FROM job_listings WHERE company_id = $1 ORDER BY created_at DESC', [companyId]
         );
         res.status(200).json(jobs);
     } catch (error) {
@@ -93,15 +93,15 @@ exports.getEmployerJobsWithStats = async(req, res) => {
     const { employerId } = req.params;
 
     try {
-        const [jobsWithApps] = await pool.query(
-            `SELECT 
+        const { rows: jobsWithApps } = await pool.query(
+            `SELECT
                 j.job_id,
                 j.title,
                 j.created_at,
-                COUNT(a.application_id) as applicationCount
+                COUNT(a.application_id)::int as "applicationCount"
             FROM job_listings j
             LEFT JOIN applications a ON j.job_id = a.job_id
-            WHERE j.employer_id = ?
+            WHERE j.employer_id = $1
             GROUP BY j.job_id
             ORDER BY j.created_at DESC`, [employerId]
         );

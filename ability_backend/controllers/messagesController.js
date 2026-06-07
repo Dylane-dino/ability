@@ -7,7 +7,7 @@ exports.getConversation = async (req, res) => {
 
   try {
     let query = `
-      SELECT 
+      SELECT
         m.message_id,
         m.sender_id,
         m.receiver_id,
@@ -20,22 +20,22 @@ exports.getConversation = async (req, res) => {
       JOIN users u1 ON m.sender_id = u1.user_id
       JOIN users u2 ON m.receiver_id = u2.user_id
       WHERE (
-        (m.sender_id = ? AND m.receiver_id = ?) 
-        OR 
-        (m.sender_id = ? AND m.receiver_id = ?)
+        (m.sender_id = $1 AND m.receiver_id = $2)
+        OR
+        (m.sender_id = $2 AND m.receiver_id = $1)
       )
     `;
 
-    const params = [userId, otherUserId, otherUserId, userId];
+    const params = [userId, otherUserId];
 
     if (jobId != null) {
-      query += ' AND m.job_id = ?';
+      query += ` AND m.job_id = $${params.length + 1}`;
       params.push(jobId);
     }
 
     query += ' ORDER BY m.sent_at ASC';
 
-    const [rows] = await pool.query(query, params);
+    const { rows } = await pool.query(query, params);
     res.status(200).json(rows);
   } catch (error) {
     console.error('Error fetching conversation:', error);
@@ -50,7 +50,7 @@ exports.getConversations = async (req, res) => {
   try {
     // Fetch all messages involving this user with partner names
     const query = `
-      SELECT 
+      SELECT
         m.message_id,
         m.sender_id,
         m.receiver_id,
@@ -61,11 +61,11 @@ exports.getConversations = async (req, res) => {
       FROM messages m
       JOIN users u1 ON m.sender_id = u1.user_id
       JOIN users u2 ON m.receiver_id = u2.user_id
-      WHERE m.sender_id = ? OR m.receiver_id = ?
+      WHERE m.sender_id = $1 OR m.receiver_id = $1
       ORDER BY m.sent_at DESC
     `;
 
-    const [rows] = await pool.query(query, [userId, userId]);
+    const { rows } = await pool.query(query, [userId]);
 
     // Build conversation summary
     const convos = {};
@@ -99,41 +99,41 @@ exports.sendMessage = async (req, res) => {
 
   try {
     // Verify sender exists
-    const [senders] = await pool.query('SELECT * FROM users WHERE user_id = ?', [sender_id]);
+    const { rows: senders } = await pool.query('SELECT * FROM users WHERE user_id = $1', [sender_id]);
     if (senders.length === 0) {
       return res.status(404).json({ message: 'Sender not found.' });
     }
 
     // Verify receiver exists
-    const [receivers] = await pool.query('SELECT * FROM users WHERE user_id = ?', [receiver_id]);
+    const { rows: receivers } = await pool.query('SELECT * FROM users WHERE user_id = $1', [receiver_id]);
     if (receivers.length === 0) {
       return res.status(404).json({ message: 'Receiver not found.' });
     }
 
     // Optional: verify job exists if provided
     if (job_id != null) {
-      const [jobs] = await pool.query('SELECT * FROM job_listings WHERE job_id = ?', [job_id]);
+      const { rows: jobs } = await pool.query('SELECT * FROM job_listings WHERE job_id = $1', [job_id]);
       if (jobs.length === 0) {
         return res.status(404).json({ message: 'Job not found.' });
       }
     }
 
-    const [result] = await pool.query(
-      'INSERT INTO messages (sender_id, receiver_id, job_id, content) VALUES (?, ?, ?, ?)',
+    const { rows: insertedMessages } = await pool.query(
+      'INSERT INTO messages (sender_id, receiver_id, job_id, content) VALUES ($1, $2, $3, $4) RETURNING message_id',
       [sender_id, receiver_id, job_id, content]
     );
 
     // Fetch created message with sender/receiver names for response
-    const [newMsg] = await pool.query(`
-      SELECT 
+    const { rows: newMsg } = await pool.query(`
+      SELECT
         m.*,
         s.full_name AS sender_name,
         r.full_name AS receiver_name
       FROM messages m
       JOIN users s ON m.sender_id = s.user_id
       JOIN users r ON m.receiver_id = r.user_id
-      WHERE m.message_id = ?
-    `, [result.insertId]);
+      WHERE m.message_id = $1
+    `, [insertedMessages[0].message_id]);
 
     res.status(201).json(newMsg[0]);
   } catch (error) {

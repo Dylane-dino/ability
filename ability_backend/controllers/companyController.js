@@ -8,8 +8,8 @@ exports.getCompanyAdmin = async(req, res) => {
     const { companyId } = req.params;
 
     try {
-        const [rows] = await pool.query(
-            'SELECT admin_user_id, company_name FROM companies WHERE company_id = ?', [companyId]
+        const { rows } = await pool.query(
+            'SELECT admin_user_id, company_name FROM companies WHERE company_id = $1', [companyId]
         );
 
         if (rows.length === 0) {
@@ -51,13 +51,13 @@ exports.createCompany = async(req, res) => {
 
         const companyName = name || `Company ${adminUserId}`;
 
-        const [result] = await pool.query(
-            'INSERT INTO companies (admin_user_id, company_name, created_at) VALUES (?, ?, NOW())', [adminUserId, companyName]
+        const { rows: insertedCompanies } = await pool.query(
+            'INSERT INTO companies (admin_user_id, company_name, created_at) VALUES ($1, $2, NOW()) RETURNING company_id', [adminUserId, companyName]
         );
 
-        const insertedId = result.insertId;
+        const insertedId = insertedCompanies[0].company_id;
 
-        const [rows] = await pool.query('SELECT company_id, company_name, admin_user_id FROM companies WHERE company_id = ?', [insertedId]);
+        const { rows } = await pool.query('SELECT company_id, company_name, admin_user_id FROM companies WHERE company_id = $1', [insertedId]);
 
         res.status(201).json(rows[0]);
     } catch (error) {
