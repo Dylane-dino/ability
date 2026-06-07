@@ -104,14 +104,15 @@ exports.login = async(req, res) => {
             process.env.JWT_SECRET, { expiresIn: '7d' }
         );
 
-res.status(200).json({
+        res.status(200).json({
             message: 'Login successful!',
             token: token,
             user: {
                 id: user.user_id,
                 name: user.email.split('@')[0], // Use email prefix as name
                 email: user.email,
-                role: user.role
+                role: user.role,
+                companyId: companyId // include companyId when available
             }
         });
 

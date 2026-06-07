@@ -4,23 +4,35 @@ exports.getEmployerDashboardStats = async(req, res) => {
     const { employerId } = req.params;
 
     try {
+        // Resolve the company_id for this employer (admin_user_id)
+        const [companyRows] = await pool.query('SELECT company_id FROM companies WHERE admin_user_id = ? LIMIT 1', [employerId]);
+
+        if (companyRows.length === 0) {
+            return res.status(200).json({
+                stats: { totalPosts: 0, totalApps: 0, interviews: 0 },
+                jobs: []
+            });
+        }
+
+        const companyId = companyRows[0].company_id;
+
         const [jobCountResult] = await pool.query(
-            'SELECT COUNT(*) as totalPosts FROM job_listings WHERE employer_id = ?', [employerId]
+            'SELECT COUNT(*) as totalPosts FROM job_listings WHERE company_id = ?', [companyId]
         );
 
         const [appCountResult] = await pool.query(`
             SELECT COUNT(*) as totalApps
             FROM applications a
             JOIN job_listings j ON a.job_id = j.job_id
-            WHERE j.employer_id = ?
-        `, [employerId]);
+            WHERE j.company_id = ?
+        `, [companyId]);
 
         const [interviewCountResult] = await pool.query(`
             SELECT COUNT(*) as totalInterviews
             FROM applications a
             JOIN job_listings j ON a.job_id = j.job_id
-            WHERE j.employer_id = ? AND LOWER(a.status) IN ('interview_offered', 'interview offered')
-        `, [employerId]);
+            WHERE j.company_id = ? AND LOWER(a.status) IN ('interview_offered', 'interview offered')
+        `, [companyId]);
 
         const [jobs] = await pool.query(`
             SELECT
@@ -37,9 +49,9 @@ exports.getEmployerDashboardStats = async(req, res) => {
                 (SELECT COUNT(*) FROM applications WHERE job_id = j.job_id) as applicantCount
             FROM job_listings j
             JOIN companies c ON j.company_id = c.company_id
-            WHERE j.employer_id = ?
+            WHERE j.company_id = ?
             ORDER BY j.created_at DESC
-        `, [employerId]);
+        `, [companyId]);
 
         res.status(200).json({
             stats: {
@@ -62,8 +74,13 @@ exports.getEmployerDashboardStats = async(req, res) => {
 exports.getEmployerActiveJobs = async(req, res) => {
     const { employerId } = req.params;
     try {
+        // Resolve company for this employer
+        const [companyRows] = await pool.query('SELECT company_id FROM companies WHERE admin_user_id = ? LIMIT 1', [employerId]);
+        if (companyRows.length === 0) return res.status(200).json([]);
+        const companyId = companyRows[0].company_id;
+
         const [jobs] = await pool.query(
-            'SELECT * FROM job_listings WHERE employer_id = ? ORDER BY created_at DESC', [employerId]
+            'SELECT * FROM job_listings WHERE company_id = ? ORDER BY created_at DESC', [companyId]
         );
         res.status(200).json(jobs);
     } catch (error) {
@@ -86,8 +103,7 @@ exports.getEmployerJobsWithStats = async(req, res) => {
             LEFT JOIN applications a ON j.job_id = a.job_id
             WHERE j.employer_id = ?
             GROUP BY j.job_id
-            ORDER BY j.created_at DESC`,
-            [employerId]
+            ORDER BY j.created_at DESC`, [employerId]
         );
 
         res.status(200).json(jobsWithApps);
